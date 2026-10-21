@@ -1,0 +1,16 @@
+name: NpcLib
+version: 1.0.0
+main: me.npclib.NpcLibPlugin
+author: NpcLib
+description: Packet based NPC library for Spigot 1.8.8
+
+commands:
+  npclib:
+    description: NpcLib demo command
+    usage: /npclib help
+    permission: npclib.admin
+
+permissions:
+  npclib.admin:
+    description: Allows managing packet NPCs
+    default: op

@@ -1,6 +1,7 @@
 package me.npclib.nms;
 
 import com.mojang.authlib.GameProfile;
+import me.npclib.SkinLayer;
 import net.minecraft.server.v1_8_R3.DataWatcher;
 import net.minecraft.server.v1_8_R3.EntityArmorStand;
 import org.bukkit.Location;
@@ -22,6 +23,8 @@ public final class NpcHandle {
     private final UUID uniqueId;
     private GameProfile profile;
     private DataWatcher dataWatcher;
+    private String customName = "";
+    private byte skinFlags;
 
     private double x;
     private double y;
@@ -47,7 +50,8 @@ public final class NpcHandle {
         this.entityId = entityId;
         this.uniqueId = uniqueId;
         this.profile = profile;
-        this.dataWatcher = createWatcher("");
+        this.skinFlags = SkinLayer.ALL;
+        rebuildWatcher();
 
         setLocation(location);
     }
@@ -114,14 +118,34 @@ public final class NpcHandle {
      * requires a server entity, and this NPC deliberately has none.
      */
     public void setCustomName(String name) {
-        this.dataWatcher = createWatcher(name == null ? "" : name);
+        this.customName = name == null ? "" : name;
+        rebuildWatcher();
     }
 
-    private static DataWatcher createWatcher(String name) {
+    /**
+     * @return the skin parts byte sent to clients, see {@link SkinLayer}
+     */
+    public byte getSkinFlags() {
+        return skinFlags;
+    }
+
+    /**
+     * Sets which second skin layers the client draws, see {@link SkinLayer}.
+     */
+    public void setSkinFlags(byte skinFlags) {
+        this.skinFlags = skinFlags;
+        rebuildWatcher();
+    }
+
+    private void rebuildWatcher() {
         DataWatcher watcher = new DataWatcher(null);
-        // Entity metadata indexes: 2 = custom name, 3 = custom name visible.
-        watcher.a(2, name);
+        // Entity metadata indexes: 2 = custom name, 3 = custom name visible,
+        // 10 = skin parts (0x01 cape, 0x02 jacket, 0x04 left sleeve, 0x08 right sleeve,
+        // 0x10 left pant leg, 0x20 right pant leg, 0x40 hat). Leaving index 10 unset makes
+        // the client hide every second skin layer, so it is always written explicitly.
+        watcher.a(2, customName);
         watcher.a(3, (byte) 1);
-        return watcher;
+        watcher.a(10, skinFlags);
+        this.dataWatcher = watcher;
     }
 }

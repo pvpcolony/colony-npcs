@@ -15,6 +15,7 @@ import org.bukkit.inventory.ItemStack;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,7 @@ public final class Npc {
     private final Hologram hologram;
     private final Map<NpcSlot, ItemStack> equipment = new EnumMap<NpcSlot, ItemStack>(NpcSlot.class);
     private final Set<UUID> viewers = new HashSet<UUID>();
+    private final EnumSet<SkinLayer> skinLayers = EnumSet.allOf(SkinLayer.class);
 
     private String profileName;
     private ScoreboardTeam team;
@@ -287,6 +289,74 @@ public final class Npc {
 
     public Npc setSkin(String value, String signature) {
         return setSkin(new NpcSkin(value, signature));
+    }
+
+    /**
+     * @return an unmodifiable copy of the second skin layers that are currently visible
+     */
+    public Set<SkinLayer> getSkinLayers() {
+        EnumSet<SkinLayer> copy = EnumSet.noneOf(SkinLayer.class);
+        copy.addAll(skinLayers);
+        return Collections.unmodifiableSet(copy);
+    }
+
+    /**
+     * @return {@code true} if the given second skin layer is drawn
+     */
+    public boolean hasSkinLayer(SkinLayer layer) {
+        return layer != null && skinLayers.contains(layer);
+    }
+
+    /**
+     * Shows or hides one part of the second skin layer (hat, jacket, sleeves, pant legs or
+     * cape). All parts are visible by default. Already spawned viewers are updated right away.
+     *
+     * @param layer   the part to change
+     * @param visible {@code true} to draw it, {@code false} to hide it
+     */
+    public Npc setSkinLayer(SkinLayer layer, boolean visible) {
+        checkNotRemoved();
+        if (layer == null) {
+            throw new IllegalArgumentException("layer cannot be null");
+        }
+        boolean changed = visible ? skinLayers.add(layer) : skinLayers.remove(layer);
+        if (changed) {
+            applySkinLayers();
+        }
+        return this;
+    }
+
+    /**
+     * Replaces the set of visible second skin layers. Calling it without arguments hides every
+     * part, {@code setSkinLayers(SkinLayer.values())} shows them all again.
+     */
+    public Npc setSkinLayers(SkinLayer... layers) {
+        checkNotRemoved();
+        EnumSet<SkinLayer> updated = EnumSet.noneOf(SkinLayer.class);
+        if (layers != null) {
+            for (SkinLayer layer : layers) {
+                if (layer == null) {
+                    throw new IllegalArgumentException("layers cannot contain null");
+                }
+                updated.add(layer);
+            }
+        }
+        if (!updated.equals(skinLayers)) {
+            skinLayers.clear();
+            skinLayers.addAll(updated);
+            applySkinLayers();
+        }
+        return this;
+    }
+
+    private void applySkinLayers() {
+        handle.setSkinFlags(SkinLayer.toFlags(skinLayers));
+        for (UUID viewerId : viewerIds()) {
+            Player player = Bukkit.getPlayer(viewerId);
+            if (player != null && player.isOnline()) {
+                NpcPackets.send(player, NpcPackets.metadata(handle));
+            }
+        }
     }
 
     /**

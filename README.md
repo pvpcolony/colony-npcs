@@ -8,7 +8,7 @@ exactly like a normal player.
 
 ## Features
 
-- Packet-only NPCs with a player skin (`GameProfile` textures)
+- Packet-only NPCs with a player skin (`GameProfile` textures), including the second skin layer
 - Vanilla name tag toggle, implemented with a per-NPC scoreboard team
 - Multi line hologram (invisible armour stands) above the NPC, shown instead of the name tag
 - Equipment: hand, helmet, chestplate, leggings and boots
@@ -139,6 +139,9 @@ public final class ExamplePlugin extends JavaPlugin {
 | `setName(String)` | Display name, supports `&` colours |
 | `setNameVisible(boolean)` | Toggles the vanilla name tag |
 | `setSkin(NpcSkin)` / `setSkin(String value, String signature)` | Applies a skin |
+| `setSkinLayer(SkinLayer, boolean)` | Shows/hides one second layer part (hat, jacket, sleeves, pant legs, cape) |
+| `setSkinLayers(SkinLayer...)` | Replaces the visible second layer parts; no arguments hides all |
+| `getSkinLayers()` / `hasSkinLayer(SkinLayer)` | The visible second layer parts |
 | `setItem(NpcSlot, ItemStack)` | Equips an item (`null` clears the slot) |
 | `action(Consumer<Player>)` | Runs when a player right-clicks the NPC (`null` removes it) |
 | `getAction()` | The current click action, or `null` |
@@ -164,6 +167,12 @@ the top line. Empty strings are used as gaps.
 `NpcSkin` holds the base64 texture value and its Mojang signature. `SkinFetcher.fetch(name)`
 resolves a skin with blocking HTTP and caches it; `SkinFetcher.fetchAsync(plugin, name,
 onSuccess, onFailure)` does the same off the main thread and calls back on the main thread.
+
+### `SkinLayer`
+
+`CAPE`, `JACKET`, `LEFT_SLEEVE`, `RIGHT_SLEEVE`, `LEFT_PANT_LEG`, `RIGHT_PANT_LEG` and `HAT`.
+Every second layer part is visible by default, matching the vanilla skin. An NPC only draws
+parts that exist in its skin texture, so a classic skin still looks its usual self.
 
 ## Notes and limitations
 

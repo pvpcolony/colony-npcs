@@ -1,5 +1,5 @@
 name: NpcLib
-version: 1.0.0
+version: 0.0.1
 main: me.npclib.NpcLibPlugin
 author: NpcLib
 description: Packet based NPC library for Spigot 1.8.8

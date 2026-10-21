@@ -32,7 +32,7 @@ exactly like a normal player.
 mvn clean package
 ```
 
-The resulting jar is `target/NpcLib-1.0.0.jar`.
+The resulting jar is `target/NpcLib-0.0.1.jar`.
 
 The build needs the `craftbukkit` 1.8.8 artifact, which is provided by the CodeMC NMS
 repository (already configured in `pom.xml`). It is `provided`, so it is not shaded into
@@ -40,7 +40,7 @@ the jar.
 
 ## Using it as a plugin
 
-Drop `NpcLib-1.0.0.jar` into your `plugins` folder. The plugin registers the demo command
+Drop `NpcLib-0.0.1.jar` into your `plugins` folder. The plugin registers the demo command
 `/npclib` (permission `npclib.admin`) and initialises the library for you.
 
 ```

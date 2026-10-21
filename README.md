@@ -32,39 +32,30 @@ exactly like a normal player.
 mvn clean package
 ```
 
-The resulting jar is `target/NpcLib-0.0.1.jar`.
+The resulting library jar is `target/NpcLib-0.0.2.jar`. It is not a standalone Bukkit plugin; add it as a dependency (or shade it into your plugin).
 
 The build needs the `craftbukkit` 1.8.8 artifact, which is provided by the CodeMC NMS
 repository (already configured in `pom.xml`). It is `provided`, so it is not shaded into
 the jar.
 
-## Using it as a plugin
-
-Drop `NpcLib-0.0.1.jar` into your `plugins` folder. The plugin registers the demo command
-`/npclib` (permission `npclib.admin`) and initialises the library for you.
-
-```
-/npclib create [name...]      create an NPC at your position (with your skin)
-/npclib remove                remove the nearest NPC
-/npclib name <text...>        set the display name, & colour codes work
-/npclib nametoggle            toggle the vanilla name tag
-/npclib skin <player>         apply the skin of a Mojang account
-/npclib holo <text...>        replace the hologram with one line
-/npclib addline <text...>     add a hologram line
-/npclib line <index> <text>   edit a line (0 = top)
-/npclib removeline <index>    remove a line
-/npclib holotoggle            show/hide the hologram
-/npclib item <slot>           equip the item you are holding
-/npclib look                  toggle turn-to-player
-/npclib here                  move the nearest NPC to you
-/npclib list                  list all NPCs
-```
-
 ## Using it as a library
 
-Either shade the jar into your plugin, or depend on it and call `NpcLib.init(this)` in
-`onEnable()` (it registers the listeners and starts the look task) and
-`NpcLib.shutdown()` in `onDisable()`.
+NpcLib is a **library-only jar**; do not install it as a separate server plugin. Add the
+artifact as a dependency or shade it into the plugin that owns the NPCs. Call
+`NpcLib.init(this)` once from that plugin's `onEnable()` and `NpcLib.shutdown(this)` from
+its `onDisable()`. Repeated `init(this)` calls are safe; a different plugin cannot silently
+claim or shut down the active library instance.
+
+```xml
+<dependency>
+    <groupId>me.npclib</groupId>
+    <artifactId>npclib</artifactId>
+    <version>0.0.2</version>
+</dependency>
+```
+
+The dependency must be available to your plugin at runtime, or shaded into its jar. The
+NpcLib project itself compiles against Spigot 1.8.8 with CraftBukkit marked `provided`.
 
 ```java
 public final class ExamplePlugin extends JavaPlugin {
@@ -110,7 +101,7 @@ public final class ExamplePlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        NpcLib.shutdown();
+        NpcLib.shutdown(this);
     }
 }
 ```
@@ -121,14 +112,15 @@ public final class ExamplePlugin extends JavaPlugin {
 
 | Method | Description |
 |---|---|
-| `init(Plugin)` | Initialises the library, listeners and the look task |
+| `init(Plugin)` | Initialises the library, listeners and look task; repeated calls by the same plugin are safe |
 | `createNpc(String name, Location location)` | Creates and shows an NPC |
 | `getNpc(int entityId)` / `getNpc(UUID)` | Looks an NPC up |
 | `getNpcs()` | All registered NPCs |
 | `showAll(Player)` / `respawnAll(Player)` / `forget(Player)` | Lifecycle helpers |
 | `setHideFromTabList(boolean)` | Enable/disable tab list hiding |
 | `setTabListRemovalDelay(int ticks)` | Delay before the tab entry is removed (default 20) |
-| `shutdown()` | Removes every NPC and stops tasks |
+| `shutdown(Plugin)` | Removes every NPC and stops resources if called by the owning plugin |
+| `shutdown()` | Forcefully shuts down the library (prefer the owner-specific overload) |
 
 ### `Npc`
 

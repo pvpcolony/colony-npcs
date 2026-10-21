@@ -29,6 +29,7 @@ public final class NpcLib {
     private static final Map<Integer, Npc> NPCS_BY_ENTITY_ID = new HashMap<Integer, Npc>();
 
     private static Plugin plugin;
+    private static NpcListener listener;
     private static BukkitTask lookTask;
     private static boolean hideFromTabList = true;
     private static int tabListRemovalDelay = 20;
@@ -38,28 +39,41 @@ public final class NpcLib {
 
     /**
      * Initialises the library for the given plugin. Registers the player listeners and
-     * starts the task that rotates look-at-player NPCs.
+     * starts the task that rotates look-at-player NPCs. Calling this repeatedly with the
+     * same plugin is safe and does not register duplicate listeners or tasks.
      *
-     * @throws IllegalStateException if the library was already initialised
+     * @throws IllegalStateException if another plugin already owns this library instance
      */
-    public static void init(Plugin plugin) {
+    public static synchronized void init(Plugin plugin) {
         if (plugin == null) {
             throw new IllegalArgumentException("plugin cannot be null");
         }
+        if (NpcLib.plugin == plugin) {
+            return;
+        }
         if (NpcLib.plugin != null) {
-            throw new IllegalStateException("NpcLib is already initialised");
+            throw new IllegalStateException("NpcLib is already initialised by plugin '"
+                    + NpcLib.plugin.getName() + "'; it cannot also be owned by '" + plugin.getName() + "'");
         }
 
         NpcLib.plugin = plugin;
-        Bukkit.getPluginManager().registerEvents(new NpcListener(), plugin);
-        lookTask = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
-            @Override
-            public void run() {
-                for (Npc npc : new ArrayList<Npc>(NPCS.values())) {
-                    npc.tick();
+        NpcLib.listener = new NpcListener();
+        try {
+            Bukkit.getPluginManager().registerEvents(listener, plugin);
+            lookTask = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
+                @Override
+                public void run() {
+                    for (Npc npc : new ArrayList<Npc>(NPCS.values())) {
+                        npc.tick();
+                    }
                 }
-            }
-        }, 2L, 2L);
+            }, 2L, 2L);
+        } catch (RuntimeException exception) {
+            org.bukkit.event.HandlerList.unregisterAll(listener);
+            listener = null;
+            NpcLib.plugin = null;
+            throw exception;
+        }
     }
 
     public static boolean isInitialised() {
@@ -152,9 +166,35 @@ public final class NpcLib {
     }
 
     /**
-     * Removes every NPC and stops all library tasks. Called on plugin disable.
+     * Removes every NPC and stops library resources only when called by the owning plugin.
+     * Use this overload from a plugin's {@code onDisable()} to prevent a different plugin
+     * from shutting down the active library instance.
+     *
+     * @param owner the plugin that called {@link #init(Plugin)}
+     * @return {@code true} if the library was shut down, otherwise {@code false}
      */
-    public static void shutdown() {
+    public static synchronized boolean shutdown(Plugin owner) {
+        if (owner == null) {
+            throw new IllegalArgumentException("owner cannot be null");
+        }
+        if (plugin != owner) {
+            return false;
+        }
+        shutdownInternal();
+        return true;
+    }
+
+    /**
+     * Forcefully removes every NPC and stops all library resources. Prefer
+     * {@link #shutdown(Plugin)} in plugin lifecycle callbacks so another plugin cannot
+     * accidentally shut down the active library instance.
+     */
+    public static synchronized void shutdown() {
+        shutdownInternal();
+    }
+
+    private static void shutdownInternal() {
+        Plugin owner = plugin;
         if (lookTask != null) {
             lookTask.cancel();
             lookTask = null;
@@ -164,6 +204,10 @@ public final class NpcLib {
         }
         NPCS.clear();
         NPCS_BY_ENTITY_ID.clear();
+        if (listener != null) {
+            org.bukkit.event.HandlerList.unregisterAll(listener);
+            listener = null;
+        }
         plugin = null;
     }
 

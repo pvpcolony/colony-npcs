@@ -6,6 +6,7 @@ import me.npclib.nms.NpcHandle;
 import me.npclib.nms.NpcPackets;
 import net.minecraft.server.v1_8_R3.ScoreboardTeam;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * A completely packet based NPC.
@@ -47,6 +49,7 @@ public final class Npc {
     private boolean turnToPlayer = false;
     private double lookRadius = 32.0D;
     private boolean removed = false;
+    private volatile Consumer<Player> action;
 
     Npc(String displayName, String profileName, Location location) {
         if (location == null || location.getWorld() == null) {
@@ -158,6 +161,50 @@ public final class Npc {
             }
         }
         return this;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // interactions
+    // ------------------------------------------------------------------------------------
+
+    /**
+     * @return the action that runs when a player right-clicks the NPC, or {@code null}
+     */
+    public Consumer<Player> getAction() {
+        return action;
+    }
+
+    /**
+     * Sets the action that runs when a player right-clicks the NPC, for example opening a
+     * shop menu. The consumer is called on the main server thread with the clicking player,
+     * and only for players the NPC is currently shown to.
+     * <p>
+     * Left clicks (attacks) do not run the action because the NPC is not a server entity and
+     * would not react to being hit otherwise.
+     *
+     * @param action the action to run, or {@code null} to stop reacting to clicks
+     */
+    public Npc action(Consumer<Player> action) {
+        checkNotRemoved();
+        this.action = action;
+        return this;
+    }
+
+    /**
+     * Called by the library when a player clicks this NPC. Exceptions thrown by the action
+     * are logged and do not affect other NPCs or the player's connection.
+     */
+    void runAction(Player player) {
+        Consumer<Player> current = action;
+        if (removed || current == null) {
+            return;
+        }
+        try {
+            current.accept(player);
+        } catch (RuntimeException exception) {
+            NpcLib.reportError("Action of NPC '" + ChatColor.stripColor(name)
+                    + "' failed for " + player.getName(), exception);
+        }
     }
 
     // ------------------------------------------------------------------------------------

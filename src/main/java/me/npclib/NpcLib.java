@@ -14,7 +14,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Entry point of the library.
@@ -27,8 +29,14 @@ public final class NpcLib {
 
     private static final Map<UUID, Npc> NPCS = new LinkedHashMap<UUID, Npc>();
     private static final Map<Integer, Npc> NPCS_BY_ENTITY_ID = new HashMap<Integer, Npc>();
+    /**
+     * Entity ids that belong to an NPC. Read from the netty thread to skip scheduling a
+     * task for every interaction packet with a normal entity.
+     */
+    private static final Set<Integer> INTERACTIVE_ENTITY_IDS =
+            Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
 
-    private static Plugin plugin;
+    private static volatile Plugin plugin;
     private static NpcListener listener;
     private static BukkitTask lookTask;
     private static boolean hideFromTabList = true;
@@ -60,6 +68,10 @@ public final class NpcLib {
         NpcLib.listener = new NpcListener();
         try {
             Bukkit.getPluginManager().registerEvents(listener, plugin);
+            // Hook players that are already online; later joins are handled by the listener.
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                InteractionInjector.inject(player);
+            }
             lookTask = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
                 @Override
                 public void run() {
@@ -101,6 +113,7 @@ public final class NpcLib {
 
         NPCS.put(npc.getUniqueId(), npc);
         NPCS_BY_ENTITY_ID.put(npc.getEntityId(), npc);
+        INTERACTIVE_ENTITY_IDS.add(npc.getEntityId());
 
         npc.spawnForAll();
         return npc;
@@ -125,6 +138,7 @@ public final class NpcLib {
         if (player == null || !player.isOnline()) {
             return;
         }
+        InteractionInjector.inject(player);
         for (Npc npc : new ArrayList<Npc>(NPCS.values())) {
             if (npc.isInWorld(player.getWorld())) {
                 npc.show(player);
@@ -144,6 +158,7 @@ public final class NpcLib {
         if (player == null || !player.isOnline()) {
             return;
         }
+        InteractionInjector.inject(player);
         for (Npc npc : new ArrayList<Npc>(NPCS.values())) {
             if (npc.isInWorld(player.getWorld())) {
                 npc.respawnFor(player);
@@ -160,6 +175,7 @@ public final class NpcLib {
         if (player == null) {
             return;
         }
+        InteractionInjector.uninject(player);
         for (Npc npc : new ArrayList<Npc>(NPCS.values())) {
             npc.forgetViewer(player);
         }
@@ -204,6 +220,7 @@ public final class NpcLib {
         }
         NPCS.clear();
         NPCS_BY_ENTITY_ID.clear();
+        INTERACTIVE_ENTITY_IDS.clear();
         if (listener != null) {
             org.bukkit.event.HandlerList.unregisterAll(listener);
             listener = null;
@@ -214,6 +231,52 @@ public final class NpcLib {
     static void unregister(Npc npc) {
         NPCS.remove(npc.getUniqueId());
         NPCS_BY_ENTITY_ID.remove(npc.getEntityId());
+        INTERACTIVE_ENTITY_IDS.remove(npc.getEntityId());
+    }
+
+    // ------------------------------------------------------------------------------------
+    // interactions
+    // ------------------------------------------------------------------------------------
+
+    /**
+     * Called on the netty thread for every use-entity packet that targets an NPC.
+     */
+    static void handleInteraction(final UUID playerId, final int entityId) {
+        final Plugin owner = plugin;
+        if (owner == null) {
+            return;
+        }
+
+        Bukkit.getScheduler().runTask(owner, new Runnable() {
+            @Override
+            public void run() {
+                Player player = Bukkit.getPlayer(playerId);
+                if (player == null || !player.isOnline()) {
+                    return;
+                }
+                Npc npc = NPCS_BY_ENTITY_ID.get(entityId);
+                if (npc == null || !npc.isShownTo(player)) {
+                    return;
+                }
+                npc.runAction(player);
+            }
+        });
+    }
+
+    /**
+     * @return whether the entity id belongs to an NPC, safe to call from any thread
+     */
+    static boolean isInteractiveEntity(int entityId) {
+        return INTERACTIVE_ENTITY_IDS.contains(entityId);
+    }
+
+    static void reportError(String message, Throwable throwable) {
+        Plugin owner = plugin;
+        if (owner != null) {
+            owner.getLogger().log(java.util.logging.Level.SEVERE, message, throwable);
+        } else {
+            Bukkit.getLogger().log(java.util.logging.Level.SEVERE, message, throwable);
+        }
     }
 
     /**

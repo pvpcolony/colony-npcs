@@ -13,6 +13,7 @@ exactly like a normal player.
 - Multi line hologram (invisible armour stands) above the NPC, shown instead of the name tag
 - Equipment: hand, helmet, chestplate, leggings and boots
 - `turnToPlayer` client side head and body rotation (with a configurable radius)
+- Right-click actions: `npc.action(player -> ...)` runs your code when a player right-clicks the NPC
 - Visible for all players, including players who join later or change worlds
 - Hidden from the tab list (configurable delay)
 - Per-player `show` / `hide`
@@ -32,7 +33,7 @@ exactly like a normal player.
 mvn clean package
 ```
 
-The resulting library jar is `target/NpcLib-0.0.2.jar`. It is not a standalone Bukkit plugin; add it as a dependency (or shade it into your plugin).
+The resulting library jar is `target/NpcLib-0.0.3.jar`. It is not a standalone Bukkit plugin; add it as a dependency (or shade it into your plugin).
 
 The build needs the `craftbukkit` 1.8.8 artifact, which is provided by the CodeMC NMS
 repository (already configured in `pom.xml`). It is `provided`, so it is not shaded into
@@ -50,7 +51,7 @@ claim or shut down the active library instance.
 <dependency>
     <groupId>me.npclib</groupId>
     <artifactId>npclib</artifactId>
-    <version>0.0.2</version>
+    <version>0.0.3</version>
 </dependency>
 ```
 
@@ -91,6 +92,15 @@ public final class ExamplePlugin extends JavaPlugin {
         npc.setItem(NpcSlot.HELMET, new ItemStack(Material.DIAMOND_HELMET));
         npc.setItem(NpcSlot.CHESTPLATE, new ItemStack(Material.IRON_CHESTPLATE));
 
+        // Run code when a player right-clicks the NPC (main thread, consumer<Player>).
+        npc.action(new Consumer<Player>() {
+            @Override
+            public void accept(Player player) {
+                player.sendMessage("§aWelcome to the bank!");
+                player.openInventory(Bukkit.createInventory(null, 27, "§2Bank"));
+            }
+        });
+
         // Look at nearby players
         npc.setTurnToPlayer(true);
         npc.setLookRadius(32.0D);
@@ -130,6 +140,8 @@ public final class ExamplePlugin extends JavaPlugin {
 | `setNameVisible(boolean)` | Toggles the vanilla name tag |
 | `setSkin(NpcSkin)` / `setSkin(String value, String signature)` | Applies a skin |
 | `setItem(NpcSlot, ItemStack)` | Equips an item (`null` clears the slot) |
+| `action(Consumer<Player>)` | Runs when a player right-clicks the NPC (`null` removes it) |
+| `getAction()` | The current click action, or `null` |
 | `clearEquipment()` | Removes all equipment |
 | `setHologramLines(String...)` | Convenience for `getHologram().setLines(...)` |
 | `setHologramVisible(boolean)` | Shows/hides the hologram |
@@ -157,10 +169,13 @@ onSuccess, onFailure)` does the same off the main thread and calls back on the m
 
 - **1.8.8 only.** The library talks to NMS `v1_8_R3` directly (with a tiny amount of
   reflection for packets whose fields are not public).
-- **No interactions.** Because there is no server entity, the server never receives
-  `use entity` packets for the NPC. If you need click detection, listen to
-  `PacketPlayInUseEntity` (for example with ProtocolLib) and compare
-  `packet.getEntityId()` with `Npc#getEntityId()`.
+- **Interactions.** Because there is no server entity, Bukkit never fires
+  `PlayerInteractEntityEvent` for an NPC. NpcLib therefore hooks the incoming
+  `PacketPlayInUseEntity` packet in each player's netty pipeline and runs
+  `Npc#action(Consumer<Player>)` on the main thread for right clicks on an NPC the player
+  can see. This needs no extra plugin (no ProtocolLib) and no server entity. Left clicks
+  (attacks) are ignored; a client can only click an NPC that is within its reach anyway.
+  `io.netty` is `provided` by the server, do not shade it into your plugin.
 - **Name tags are profile names.** In 1.8 the client renders a player's name tag from its
   `GameProfile` name, so the vanilla tag is limited to 16 characters, has no colour codes
   and sanitises spaces to `_`. Use the hologram for formatted or longer names. The profile

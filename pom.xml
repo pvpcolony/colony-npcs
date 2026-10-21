@@ -6,7 +6,7 @@
 
     <groupId>me.npclib</groupId>
     <artifactId>npclib</artifactId>
-    <version>0.0.2</version>
+    <version>0.0.3</version>
     <packaging>jar</packaging>
 
     <name>NpcLib</name>
@@ -34,6 +34,17 @@
             <groupId>org.bukkit</groupId>
             <artifactId>craftbukkit</artifactId>
             <version>1.8.8-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+        <!--
+            Used for the per-player channel handler that turns use-entity packets into NPC
+            click callbacks. The server already ships netty, so this is provided and must
+            not be shaded into the NpcLib jar.
+        -->
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId>
+            <version>4.0.23.Final</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>

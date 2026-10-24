@@ -388,6 +388,7 @@ public final class Npc {
         NpcPackets.send(player, NpcPackets.destroy(handle.getEntityId()));
         NpcPackets.send(player, NpcPackets.addPlayerInfo(handle));
         NpcPackets.send(player, NpcPackets.spawnNamed(handle));
+        sendHeadRotation(player);
         sendEquipment(player);
         NpcPackets.send(player, NpcPackets.metadata(handle));
         scheduleTabListRemoval(player);
@@ -505,6 +506,7 @@ public final class Npc {
                 Player player = Bukkit.getPlayer(viewerId);
                 if (player != null && player.isOnline()) {
                     NpcPackets.send(player, NpcPackets.teleport(handle));
+                    sendHeadRotation(player);
                 }
             }
             hologram.updatePositions();
@@ -650,10 +652,20 @@ public final class Npc {
         NpcPackets.send(player, NpcPackets.teamCreate(team));
         NpcPackets.send(player, NpcPackets.addPlayerInfo(handle));
         NpcPackets.send(player, NpcPackets.spawnNamed(handle));
+        sendHeadRotation(player);
         sendEquipment(player);
         NpcPackets.send(player, NpcPackets.metadata(handle));
         hologram.showTo(player);
         scheduleTabListRemoval(player);
+    }
+
+    /**
+     * The spawn and teleport packets only carry the body yaw; the client keeps whatever head
+     * yaw it picked when it created the entity. A separate head rotation packet is the only
+     * way to make the head face the same way as the body.
+     */
+    private void sendHeadRotation(Player player) {
+        NpcPackets.send(player, NpcPackets.headRotation(handle.getEntityId(), handle.getYaw()));
     }
 
     private void sendDespawn(Player player) {

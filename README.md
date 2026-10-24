@@ -33,7 +33,7 @@ exactly like a normal player.
 mvn clean package
 ```
 
-The resulting library jar is `target/NpcLib-0.0.3.jar`. It is not a standalone Bukkit plugin; add it as a dependency (or shade it into your plugin).
+The resulting library jar is `target/NpcLib-0.0.5.jar`. It is not a standalone Bukkit plugin; add it as a dependency (or shade it into your plugin).
 
 The build needs the `craftbukkit` 1.8.8 artifact, which is provided by the CodeMC NMS
 repository (already configured in `pom.xml`). It is `provided`, so it is not shaded into
@@ -51,7 +51,7 @@ claim or shut down the active library instance.
 <dependency>
     <groupId>me.npclib</groupId>
     <artifactId>npclib</artifactId>
-    <version>0.0.3</version>
+    <version>0.0.5</version>
 </dependency>
 ```
 

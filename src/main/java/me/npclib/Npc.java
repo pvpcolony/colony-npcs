@@ -52,6 +52,7 @@ public final class Npc {
     private double lookRadius = 32.0D;
     private boolean removed = false;
     private volatile Consumer<Player> action;
+    private volatile ClickType clickType = ClickType.RIGHT;
 
     Npc(String displayName, String profileName, Location location) {
         if (location == null || location.getWorld() == null) {
@@ -170,19 +171,27 @@ public final class Npc {
     // ------------------------------------------------------------------------------------
 
     /**
-     * @return the action that runs when a player right-clicks the NPC, or {@code null}
+     * @return the action that runs when the NPC is clicked, or {@code null}
      */
     public Consumer<Player> getAction() {
         return action;
     }
 
     /**
+     * @return the mouse button that runs the action, {@link ClickType#RIGHT} by default
+     */
+    public ClickType getClickType() {
+        return clickType;
+    }
+
+    /**
      * Sets the action that runs when a player right-clicks the NPC, for example opening a
-     * shop menu. The consumer is called on the main server thread with the clicking player,
-     * and only for players the NPC is currently shown to.
+     * shop menu, and keeps the current {@link #getClickType() click type}. The consumer is
+     * called on the main server thread with the clicking player, and only for players the
+     * NPC is currently shown to.
      * <p>
-     * Left clicks (attacks) do not run the action because the NPC is not a server entity and
-     * would not react to being hit otherwise.
+     * The action runs at most once per click, even though the 1.8 client can send more than
+     * one use-entity packet for the same click.
      *
      * @param action the action to run, or {@code null} to stop reacting to clicks
      */
@@ -193,12 +202,29 @@ public final class Npc {
     }
 
     /**
+     * Sets the action and the mouse button that runs it, for example
+     * {@code npc.action(ClickType.LEFT, player -> ...)} to react to hits only.
+     *
+     * @param clickType the button(s) that run the action, must not be {@code null}
+     * @param action    the action to run, or {@code null} to stop reacting to clicks
+     */
+    public Npc action(ClickType clickType, Consumer<Player> action) {
+        checkNotRemoved();
+        if (clickType == null) {
+            throw new IllegalArgumentException("clickType cannot be null");
+        }
+        this.clickType = clickType;
+        this.action = action;
+        return this;
+    }
+
+    /**
      * Called by the library when a player clicks this NPC. Exceptions thrown by the action
      * are logged and do not affect other NPCs or the player's connection.
      */
-    void runAction(Player player) {
+    void runAction(Player player, ClickType click) {
         Consumer<Player> current = action;
-        if (removed || current == null) {
+        if (removed || current == null || !clickType.matches(click)) {
             return;
         }
         try {

@@ -239,11 +239,12 @@ public final class NpcLib {
     // ------------------------------------------------------------------------------------
 
     /**
-     * Called on the netty thread for every use-entity packet that targets an NPC.
+     * Called on the netty thread for every use-entity packet that targets an NPC. The packet
+     * hook already removed duplicate packets of the same click.
      */
-    static void handleInteraction(final UUID playerId, final int entityId) {
+    static void handleInteraction(final UUID playerId, final int entityId, final ClickType clickType) {
         final Plugin owner = plugin;
-        if (owner == null) {
+        if (owner == null || clickType == null) {
             return;
         }
 
@@ -258,7 +259,7 @@ public final class NpcLib {
                 if (npc == null || !npc.isShownTo(player)) {
                     return;
                 }
-                npc.runAction(player);
+                npc.runAction(player, clickType);
             }
         });
     }

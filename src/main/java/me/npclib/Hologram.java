@@ -207,6 +207,7 @@ public final class Hologram {
      * Recreates the line entities for the current text and pushes the result to every viewer.
      */
     void rebuild() {
+        clearProxies();
         int[] oldIds = ids();
         rendered.clear();
 
@@ -220,6 +221,11 @@ public final class Hologram {
                 double y = lineY(base, index, lines.size());
                 rendered.add(new Line(base.getWorld(), text, base.getX(), y, base.getZ(), index));
             }
+        }
+
+        // A click on the name text hits the invisible stand that carries it, not the NPC.
+        for (Line line : rendered) {
+            NpcLib.registerClickProxy(line.stand.getId(), npc);
         }
 
         for (UUID viewerId : npc.viewerIds()) {
@@ -253,6 +259,16 @@ public final class Hologram {
             for (Line line : rendered) {
                 NpcPackets.send(player, NpcPackets.teleport(line.stand));
             }
+        }
+    }
+
+    /**
+     * Stops clicks on the current lines from reaching the NPC. Called when the lines are
+     * rebuilt and when the NPC is removed.
+     */
+    void clearProxies() {
+        for (Line line : rendered) {
+            NpcLib.unregisterClickProxy(line.stand.getId());
         }
     }
 

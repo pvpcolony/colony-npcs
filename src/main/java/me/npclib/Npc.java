@@ -16,6 +16,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +54,17 @@ public final class Npc {
     private boolean removed = false;
     private volatile Consumer<Player> action;
     private volatile ClickType clickType = ClickType.RIGHT;
+    private final Map<UUID, Long> lastClickNanos = new HashMap<UUID, Long>();
+
+    /**
+     * A single click produces up to three use-entity packets: an interact and an interact-at
+     * packet for a right click, plus an attack packet when the player presses both buttons at
+     * the same time. They all arrive within the same tick, so a click that reaches this NPC
+     * this soon after one that already ran the action belongs to that same click. A human
+     * cannot click the same NPC faster than 10 times a second and the client repeats a held
+     * button at most every 4 ticks (200 ms), so no intended click is dropped.
+     */
+    private static final long CLICK_WINDOW_NANOS = 100000000L;
 
     Npc(String displayName, String profileName, Location location) {
         if (location == null || location.getWorld() == null) {
@@ -219,14 +231,36 @@ public final class Npc {
     }
 
     /**
+     * @return {@code true} if this click should run the action, i.e. no click of the same
+     *         player ran on this NPC within the last {@link #CLICK_WINDOW_NANOS}. The button is
+     *         not part of the key, so the left and the right packet of one click collapse into
+     *         a single run.
+     */
+    boolean claimClick(UUID playerId) {
+        long now = System.nanoTime();
+        Long previous = lastClickNanos.put(playerId, now);
+        return previous == null || now - previous >= CLICK_WINDOW_NANOS;
+    }
+
+    /**
      * Called by the library when a player clicks this NPC. Exceptions thrown by the action
      * are logged and do not affect other NPCs or the player's connection.
+     * <p>
+     * The action runs at most once per click, even though one click can arrive as several
+     * packets and with both buttons at once. The window is applied after the
+     * {@link #getClickType() click type} filter, so a click that does not run the action (for
+     * example a left click on a right-click NPC) never swallows the next real one.
      */
     void runAction(Player player, ClickType click) {
         Consumer<Player> current = action;
         if (removed || current == null || !clickType.matches(click)) {
             return;
         }
+
+        if (!claimClick(player.getUniqueId())) {
+            return;
+        }
+
         try {
             current.accept(player);
         } catch (RuntimeException exception) {
@@ -638,6 +672,8 @@ public final class Npc {
             }
         }
         viewers.clear();
+        lastClickNanos.clear();
+        hologram.clearProxies();
         NpcLib.unregister(this);
     }
 
@@ -666,6 +702,7 @@ public final class Npc {
     void forgetViewer(Player player) {
         if (player != null) {
             viewers.remove(player.getUniqueId());
+            lastClickNanos.remove(player.getUniqueId());
         }
     }
 

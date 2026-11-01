@@ -14,7 +14,8 @@ exactly like a normal player.
 - Equipment: hand, helmet, chestplate, leggings and boots
 - `turnToPlayer` client side head and body rotation (with a configurable radius)
 - Click actions: `npc.action(player -> ...)` runs your code when a player clicks the NPC,
-  exactly once per click, filtered by `ClickType` (`RIGHT`, `LEFT` or `BOTH`)
+  exactly once per click, filtered by `ClickType` (`RIGHT`, `LEFT` or `BOTH`). Clicks on the
+  floating name lines count as clicks on the NPC
 - Visible for all players, including players who join later or change worlds
 - Hidden from the tab list (configurable delay)
 - Per-player `show` / `hide`
@@ -34,7 +35,7 @@ exactly like a normal player.
 mvn clean package
 ```
 
-The resulting library jar is `target/NpcLib-0.0.6.jar`. It is not a standalone Bukkit plugin; add it as a dependency (or shade it into your plugin).
+The resulting library jar is `target/NpcLib-0.0.7.jar`. It is not a standalone Bukkit plugin; add it as a dependency (or shade it into your plugin).
 
 The build needs the `craftbukkit` 1.8.8 artifact, which is provided by the CodeMC NMS
 repository (already configured in `pom.xml`). It is `provided`, so it is not shaded into
@@ -52,7 +53,7 @@ claim or shut down the active library instance.
 <dependency>
     <groupId>me.npclib</groupId>
     <artifactId>npclib</artifactId>
-    <version>0.0.6</version>
+    <version>0.0.7</version>
 </dependency>
 ```
 
@@ -176,9 +177,14 @@ onSuccess, onFailure)` does the same off the main thread and calls back on the m
 ### `ClickType`
 
 `RIGHT` (the default), `LEFT` or `BOTH`. `npc.action(ClickType.LEFT, player -> ...)` runs
-only when a player hits the NPC, `ClickType.BOTH` on both buttons. The action runs at most
-once per click: the 1.8 client can send more than one use-entity packet for the same click
-and NpcLib drops the repeats.
+only when a player hits the NPC, `ClickType.BOTH` on both buttons.
+
+The action runs at most once per click. One click can reach the server as several packets
+(the client sends an interact and an interact-at packet for a right click, and a player who
+presses both buttons at once sends a left and a right packet), so a click on the same NPC
+within 100 ms of one that already ran the action is treated as part of that same click. The
+window is applied to clicks that actually run the action, so a button that is ignored by the
+`ClickType` never swallows the next real click.
 
 ### `SkinLayer`
 
@@ -194,10 +200,12 @@ parts that exist in its skin texture, so a classic skin still looks its usual se
   `PlayerInteractEntityEvent` for an NPC. NpcLib therefore hooks the incoming
   `PacketPlayInUseEntity` packet in each player's netty pipeline and runs the NPC action on
   the main thread for clicks on an NPC the player can see, filtered by
-  `ClickType` (`RIGHT` by default). Repeated packets that belong to the same click are
-  dropped, so the action never runs twice for one click. This needs no extra plugin (no
-  ProtocolLib) and no server entity. Left clicks have no other effect because the NPC is
-  not a server entity; a client can only click an NPC that is within its reach anyway.
+  `ClickType` (`RIGHT` by default). Packets that belong to the same click are collapsed, so
+  the action never runs twice for one click. Because the hologram lines are separate packet
+  entities, a click on the floating name is routed to the NPC it belongs to as well. This
+  needs no extra plugin (no ProtocolLib) and no server entity. Left clicks have no other
+  effect because the NPC is not a server entity; a client can only click an NPC that is
+  within its reach anyway.
   `io.netty` is `provided` by the server, do not shade it into your plugin.
 - **Name tags are profile names.** In 1.8 the client renders a player's name tag from its
   `GameProfile` name, so the vanilla tag is limited to 16 characters, has no colour codes

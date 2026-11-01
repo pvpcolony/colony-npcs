@@ -138,19 +138,7 @@ final class InteractionInjector {
      */
     private static final class Handler extends ChannelInboundHandlerAdapter {
 
-        /**
-         * A single 1.8 click can produce more than one use-entity packet (an interact and an
-         * interact-at packet for the same hit). The packets of one click are written to the
-         * connection back to back, so a repeat of the same entity and button within this
-         * window is the same click. The client itself repeats a held button at most every
-         * 4 ticks (200 ms), so a real click is never dropped.
-         */
-        private static final long DUPLICATE_WINDOW_NANOS = 50000000L;
-
         private final UUID playerId;
-        private int lastEntityId = -1;
-        private ClickType lastClickType;
-        private long lastClickNanos;
 
         private Handler(UUID playerId) {
             this.playerId = playerId;
@@ -167,17 +155,17 @@ final class InteractionInjector {
         private void handleUseEntity(PacketPlayInUseEntity packet) {
             try {
                 int entityId = entityId(packet);
-                // Normal entities are not ours; check before keeping per-click state.
+                // Normal entities are not ours; skip the lookup for everything else.
                 if (!NpcLib.isInteractiveEntity(entityId)) {
                     return;
                 }
 
-                ClickType clickType = clickType(packet);
-                if (isDuplicate(entityId, clickType)) {
-                    return;
-                }
-
-                NpcLib.handleInteraction(playerId, entityId, clickType);
+                // One click can arrive as several packets, but the packet alone does not say
+                // whether it runs the NPC's action (that depends on its ClickType). Every
+                // packet is forwarded and the per-click window is applied on the main thread
+                // in Npc#runAction, so a click that does not run the action cannot swallow
+                // the next real one.
+                NpcLib.handleInteraction(playerId, entityId, clickType(packet));
             } catch (Exception exception) {
                 // A broken packet must never disconnect the player, but it also must not be
                 // hidden completely.
@@ -185,18 +173,5 @@ final class InteractionInjector {
             }
         }
 
-        /**
-         * @return {@code true} if this packet belongs to the click that was just dispatched
-         */
-        private boolean isDuplicate(int entityId, ClickType clickType) {
-            long now = System.nanoTime();
-            boolean duplicate = entityId == lastEntityId
-                    && clickType == lastClickType
-                    && now - lastClickNanos < DUPLICATE_WINDOW_NANOS;
-            lastEntityId = entityId;
-            lastClickType = clickType;
-            lastClickNanos = now;
-            return duplicate;
-        }
     }
 }

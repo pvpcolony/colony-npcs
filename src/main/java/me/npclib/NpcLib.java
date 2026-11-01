@@ -35,6 +35,12 @@ public final class NpcLib {
      */
     private static final Set<Integer> INTERACTIVE_ENTITY_IDS =
             Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
+    /**
+     * Entity ids of the hologram lines of an NPC, mapped to that NPC. Players regularly aim at
+     * the floating text instead of the body, and the client reports those hits with the id of
+     * the line, so a click on a line counts as a click on its NPC.
+     */
+    private static final Map<Integer, Npc> CLICK_PROXIES = new ConcurrentHashMap<Integer, Npc>();
 
     private static volatile Plugin plugin;
     private static NpcListener listener;
@@ -221,6 +227,7 @@ public final class NpcLib {
         NPCS.clear();
         NPCS_BY_ENTITY_ID.clear();
         INTERACTIVE_ENTITY_IDS.clear();
+        CLICK_PROXIES.clear();
         if (listener != null) {
             org.bukkit.event.HandlerList.unregisterAll(listener);
             listener = null;
@@ -234,13 +241,30 @@ public final class NpcLib {
         INTERACTIVE_ENTITY_IDS.remove(npc.getEntityId());
     }
 
+    /**
+     * Marks an entity id as a click stand-in for the NPC, used for the hologram lines.
+     */
+    static void registerClickProxy(int entityId, Npc npc) {
+        if (npc != null) {
+            CLICK_PROXIES.put(entityId, npc);
+        }
+    }
+
+    /**
+     * Stops clicks on the entity id from reaching the NPC, used when a line is rebuilt.
+     */
+    static void unregisterClickProxy(int entityId) {
+        CLICK_PROXIES.remove(entityId);
+    }
+
     // ------------------------------------------------------------------------------------
     // interactions
     // ------------------------------------------------------------------------------------
 
     /**
-     * Called on the netty thread for every use-entity packet that targets an NPC. The packet
-     * hook already removed duplicate packets of the same click.
+     * Called on the netty thread for every use-entity packet that targets an NPC or one of its
+     * hologram lines. One click can produce several packets; {@link Npc#runAction} keeps the
+     * action to one run per click.
      */
     static void handleInteraction(final UUID playerId, final int entityId, final ClickType clickType) {
         final Plugin owner = plugin;
@@ -256,6 +280,9 @@ public final class NpcLib {
                     return;
                 }
                 Npc npc = NPCS_BY_ENTITY_ID.get(entityId);
+                if (npc == null) {
+                    npc = CLICK_PROXIES.get(entityId);
+                }
                 if (npc == null || !npc.isShownTo(player)) {
                     return;
                 }
@@ -268,7 +295,7 @@ public final class NpcLib {
      * @return whether the entity id belongs to an NPC, safe to call from any thread
      */
     static boolean isInteractiveEntity(int entityId) {
-        return INTERACTIVE_ENTITY_IDS.contains(entityId);
+        return INTERACTIVE_ENTITY_IDS.contains(entityId) || CLICK_PROXIES.containsKey(entityId);
     }
 
     static void reportError(String message, Throwable throwable) {

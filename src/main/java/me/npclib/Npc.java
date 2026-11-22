@@ -55,6 +55,11 @@ public final class Npc {
     private volatile Consumer<Player> action;
     private volatile ClickType clickType = ClickType.RIGHT;
     private final Map<UUID, Long> lastClickNanos = new HashMap<UUID, Long>();
+    private double interactionRange = NpcLib.getDefaultInteractionRange();
+
+    /** Vanilla player hitbox, used for the interaction range check. */
+    private static final double BODY_WIDTH = 0.6D;
+    private static final double BODY_HEIGHT = 1.8D;
 
     /**
      * A single click produces up to three use-entity packets: an interact and an interact-at
@@ -231,6 +236,62 @@ public final class Npc {
     }
 
     /**
+     * @return how far a player's eyes may be from the NPC's hitbox and still click it, in blocks
+     */
+    public double getInteractionRange() {
+        return interactionRange;
+    }
+
+    /**
+     * Sets how far a player may be from the NPC and still click it.
+     * <p>
+     * The distance is measured on the server from the player's eyes to the NPC's hitbox, which
+     * makes the reach the same for everyone: it no longer depends on the client (a creative
+     * player otherwise reaches half a block further than a survival player), on where on the
+     * body the player aims (feet, head or the floating name), or on the direction the NPC
+     * faces. Defaults to {@link NpcLib#getDefaultInteractionRange()}.
+     * <p>
+     * The client only sends a click for an entity it can reach itself, so a value above its own
+     * reach cannot pull in clicks from further away; a smaller value reliably stops them.
+     *
+     * @param interactionRange the radius in blocks, must be a positive number
+     */
+    public Npc setInteractionRange(double interactionRange) {
+        checkNotRemoved();
+        if (!(interactionRange > 0.0D) || Double.isInfinite(interactionRange)) {
+            throw new IllegalArgumentException("Interaction range must be a positive number of blocks");
+        }
+        this.interactionRange = interactionRange;
+        return this;
+    }
+
+    /**
+     * @return whether the player is close enough to click this NPC
+     */
+    public boolean isInInteractionRange(Player player) {
+        if (player == null || location.getWorld() == null || !location.getWorld().equals(player.getWorld())) {
+            return false;
+        }
+        Location eye = player.getEyeLocation();
+        return distanceToBody(eye.getX(), eye.getY(), eye.getZ()) <= interactionRange;
+    }
+
+    /**
+     * @return the distance from the given position to the NPC's hitbox, zero inside it
+     */
+    double distanceToBody(double x, double y, double z) {
+        double dx = outside(x - location.getX(), BODY_WIDTH / 2.0D);
+        double dy = outside(y - location.getY() - BODY_HEIGHT / 2.0D, BODY_HEIGHT / 2.0D);
+        double dz = outside(z - location.getZ(), BODY_WIDTH / 2.0D);
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    private static double outside(double offset, double halfExtent) {
+        double distance = Math.abs(offset) - halfExtent;
+        return distance > 0.0D ? distance : 0.0D;
+    }
+
+    /**
      * @return {@code true} if this click should run the action, i.e. no click of the same
      *         player ran on this NPC within the last {@link #CLICK_WINDOW_NANOS}. The button is
      *         not part of the key, so the left and the right packet of one click collapse into
@@ -254,6 +315,11 @@ public final class Npc {
     void runAction(Player player, ClickType click) {
         Consumer<Player> current = action;
         if (removed || current == null || !clickType.matches(click)) {
+            return;
+        }
+        // Checked before the click window is claimed, so an out of range click cannot swallow
+        // the next in range one.
+        if (!isInInteractionRange(player)) {
             return;
         }
 

@@ -16,6 +16,8 @@ exactly like a normal player.
 - Click actions: `npc.action(player -> ...)` runs your code when a player clicks the NPC,
   exactly once per click, filtered by `ClickType` (`RIGHT`, `LEFT` or `BOTH`). Clicks on the
   floating name lines count as clicks on the NPC
+- Server side interaction range (`setInteractionRange`, default 4.5 blocks) that is the same
+  for every player, gamemode and aim point
 - Visible for all players, including players who join later or change worlds
 - Hidden from the tab list (configurable delay)
 - Per-player `show` / `hide`
@@ -35,7 +37,7 @@ exactly like a normal player.
 mvn clean package
 ```
 
-The resulting library jar is `target/NpcLib-0.0.7.jar`. It is not a standalone Bukkit plugin; add it as a dependency (or shade it into your plugin).
+The resulting library jar is `target/NpcLib-0.0.8.jar`. It is not a standalone Bukkit plugin; add it as a dependency (or shade it into your plugin).
 
 The build needs the `craftbukkit` 1.8.8 artifact, which is provided by the CodeMC NMS
 repository (already configured in `pom.xml`). It is `provided`, so it is not shaded into
@@ -53,7 +55,7 @@ claim or shut down the active library instance.
 <dependency>
     <groupId>me.npclib</groupId>
     <artifactId>npclib</artifactId>
-    <version>0.0.7</version>
+    <version>0.0.8</version>
 </dependency>
 ```
 
@@ -134,6 +136,7 @@ public final class ExamplePlugin extends JavaPlugin {
 | `showAll(Player)` / `respawnAll(Player)` / `forget(Player)` | Lifecycle helpers |
 | `setHideFromTabList(boolean)` | Enable/disable tab list hiding |
 | `setTabListRemovalDelay(int ticks)` | Delay before the tab entry is removed (default 20) |
+| `setDefaultInteractionRange(double)` / `getDefaultInteractionRange()` | Interaction range of NPCs created later (default 4.5) |
 | `shutdown(Plugin)` | Removes every NPC and stops resources if called by the owning plugin |
 | `shutdown()` | Forcefully shuts down the library (prefer the owner-specific overload) |
 
@@ -151,6 +154,8 @@ public final class ExamplePlugin extends JavaPlugin {
 | `action(Consumer<Player>)` | Runs on right click, exactly once per click (`null` removes it) |
 | `action(ClickType, Consumer<Player>)` | Same, with the button(s) that run it (`RIGHT`, `LEFT` or `BOTH`) |
 | `getAction()` / `getClickType()` | The current click action and the button(s) that trigger it |
+| `setInteractionRange(double)` / `getInteractionRange()` | How close a player must be to click the NPC (default 4.5 blocks) |
+| `isInInteractionRange(Player)` | Whether a player is close enough to click the NPC |
 | `clearEquipment()` | Removes all equipment |
 | `setHologramLines(String...)` | Convenience for `getHologram().setLines(...)` |
 | `setHologramVisible(boolean)` | Shows/hides the hologram |
@@ -204,8 +209,12 @@ parts that exist in its skin texture, so a classic skin still looks its usual se
   the action never runs twice for one click. Because the hologram lines are separate packet
   entities, a click on the floating name is routed to the NPC it belongs to as well. This
   needs no extra plugin (no ProtocolLib) and no server entity. Left clicks have no other
-  effect because the NPC is not a server entity; a client can only click an NPC that is
-  within its reach anyway.
+  effect because the NPC is not a server entity. Reach is decided on the server: the player's
+  eyes have to be within `getInteractionRange()` of the NPC's hitbox, so every player, every
+  gamemode and every aim point (feet, head, floating name) gets the same reach. The client
+  itself still refuses to click an entity beyond its own reach (about 4.5 blocks in survival
+  and 5 in creative), which no packet can change, so a larger range cannot pull in clicks
+  from further away.
   `io.netty` is `provided` by the server, do not shade it into your plugin.
 - **Name tags are profile names.** In 1.8 the client renders a player's name tag from its
   `GameProfile` name, so the vanilla tag is limited to 16 characters, has no colour codes

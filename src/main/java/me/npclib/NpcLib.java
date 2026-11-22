@@ -42,6 +42,13 @@ public final class NpcLib {
      */
     private static final Map<Integer, Npc> CLICK_PROXIES = new ConcurrentHashMap<Integer, Npc>();
 
+    /**
+     * Reach of a new NPC: the vanilla survival player reach, measured from the player's eyes to
+     * the NPC's hitbox.
+     */
+    public static final double DEFAULT_INTERACTION_RANGE = 4.5D;
+
+    private static volatile double defaultInteractionRange = DEFAULT_INTERACTION_RANGE;
     private static volatile Plugin plugin;
     private static NpcListener listener;
     private static BukkitTask lookTask;
@@ -96,6 +103,26 @@ public final class NpcLib {
 
     public static boolean isInitialised() {
         return plugin != null;
+    }
+
+    /**
+     * @return the interaction range a newly created NPC starts with
+     */
+    public static double getDefaultInteractionRange() {
+        return defaultInteractionRange;
+    }
+
+    /**
+     * Sets the interaction range of every NPC created after this call. NPCs that already exist
+     * keep their own range; change those with {@link Npc#setInteractionRange(double)}.
+     *
+     * @param interactionRange the radius in blocks, must be a positive number
+     */
+    public static void setDefaultInteractionRange(double interactionRange) {
+        if (!(interactionRange > 0.0D) || Double.isInfinite(interactionRange)) {
+            throw new IllegalArgumentException("Interaction range must be a positive number of blocks");
+        }
+        defaultInteractionRange = interactionRange;
     }
 
     public static Plugin getPlugin() {
